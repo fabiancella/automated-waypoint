@@ -9,7 +9,7 @@ Learning Goals:
 - How waypoint navigation works
 - Basic control systems / PID
 
-# Tech Split
+# Tech Stack
 C
 GNC/control algorithms
 Compile the C code as a shared library and call it from Python using ctypes or cffi.
