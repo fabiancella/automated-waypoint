@@ -2,14 +2,23 @@ from fastapi import FastAPI, HTTPException, WebSocketException
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, create_engine, Session, select
+from sqlalchemy.engine import URL
 import os
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from models import Aircraft, Route, Waypoint, WaypointCreate, SimulationRun
 
 app = FastAPI()
 load_dotenv()
 
-DATABASE_URL = f'postgresql://postgres:{os.getenv('DB_PASSWORD')}@localhost:5432/postgres'
+DATABASE_URL = URL.create(
+    drivername="postgresql+psycopg2",
+    username="postgres",
+    password=os.environ["DB_PASSWORD"],
+    host="127.0.0.1",
+    port=5433,
+    database="postgres"
+)
 
 engine = create_engine(DATABASE_URL, echo=True)
 
@@ -20,33 +29,6 @@ def create_db_and_tables():
 @app.on_event('startup')
 def on_startup():
     create_db_and_tables()
-
-class Aircraft(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    latitude: float
-    longitude: float
-    altitude: int
-    grd_speed: int
-
-class Route(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    # aircraft foreign key
-    aircraft_id: int = Field(foreign_key='aircraft.id')
-
-class Waypoint(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    latitude: float
-    longitude: float
-    altitude: int
-    sequence: int
-    # route foreign key
-    route_id: int = Field(foreign_key='route.id')
-
-class WaypointCreate(SQLModel):
-    latitude: float
-    longitude: float
-    altitude: int
-    sequence: int
 
 # ---------- POST ROUTES ----------
 @app.post('/aircraft/{aircraft_id}/routes', response_model=Route)
@@ -75,6 +57,11 @@ def create_route(aircraft_id: int):
 @app.post('/routes/{route_id}/waypoints', response_model=Waypoint)
 def waypoints_by_routeid(route_id: int, data: WaypointCreate):
     with Session(engine) as session:
+        route_id_check = session.get(Route, route_id)
+        
+        if not route_id_check:
+            raise HTTPException(status_code=404, detail='Could not find route ID')
+        
         waypoint = Waypoint(
             latitude = data.latitude,
             longitude = data.longitude,
@@ -88,9 +75,22 @@ def waypoints_by_routeid(route_id: int, data: WaypointCreate):
             session.commit()
             session.refresh(waypoint)
         except Exception:
+            session.rollback()
             raise HTTPException(status_code=500, detail='Could not save data')
     
     return waypoint
+
+@app.post('/routes/{route_id}/simulations', response_model=SimulationRun)
+def create_simulation(route_id: int):
+    with Session(engine) as session:
+        route_id_check = session.get(Route, route_id)
+        
+        if not route_id_check:
+            raise HTTPException(status_code=404, detail='Couldnt find route id')
+        
+        simulation = SimulationRun(
+            
+        )
 
 # ---------- GET ROUTES ----------
 @app.get('/aircraft', response_model=list[Aircraft])
@@ -99,6 +99,22 @@ def get_aircraft():
         aircrafts = session.exec(select(Aircraft)).all()        
     
     return aircrafts
+
+@app.get('/routes/{route_id}/waypoints', response_model=list[Waypoint])
+def get_routes(route_id: int):
+    with Session(engine) as session:
+        route_id_check = session.get(Route, route_id)
+        if not route_id_check:
+            raise HTTPException(status_code=404, detail='Couldnt find route id')
+        
+        statement = select(Waypoint).where(
+            Waypoint.route_id == route_id
+        ).order_by(Waypoint.sequence)
+        
+        results = session.exec(statement).all()
+
+        return results
+    
 
 
         
