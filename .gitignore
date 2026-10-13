@@ -1,3 +1,4 @@
 .env
 tracker.md
 DEVLOG.md
+__pycache__/
